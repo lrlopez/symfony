@@ -11,6 +11,7 @@
 
 namespace Symfony\Component\PropertyAccess;
 
+use Doctrine\Common\Annotations\AnnotationReader;
 use Symfony\Component\Inflector\Inflector;
 use Symfony\Component\PropertyAccess\Exception\AccessException;
 use Symfony\Component\PropertyAccess\Exception\InvalidArgumentException;
@@ -24,6 +25,7 @@ use Symfony\Component\PropertyAccess\Exception\UnexpectedTypeException;
  * @author Bernhard Schussek <bschussek@gmail.com>
  * @author Kévin Dunglas <dunglas@gmail.com>
  * @author Nicolas Grekas <p@tchwork.com>
+ * @author Luis Ramón López <lrlopez@gmail.com>
  */
 class PropertyAccessor implements PropertyAccessorInterface
 {
@@ -121,16 +123,22 @@ class PropertyAccessor implements PropertyAccessorInterface
     private static $resultProto = array(self::VALUE => null);
 
     /**
+     * @var AnnotationReader
+     */
+    private $reader;
+
+    /**
      * Should not be used by application code. Use
      * {@link PropertyAccess::createPropertyAccessor()} instead.
      *
      * @param bool $magicCall
      * @param bool $throwExceptionOnInvalidIndex
      */
-    public function __construct($magicCall = false, $throwExceptionOnInvalidIndex = false)
+    public function __construct($magicCall = false, $throwExceptionOnInvalidIndex = false, AnnotationReader $reader = null)
     {
         $this->magicCall = $magicCall;
         $this->ignoreInvalidIndices = !$throwExceptionOnInvalidIndex;
+        $this->reader = $reader;
     }
 
     /**
@@ -509,17 +517,30 @@ class PropertyAccessor implements PropertyAccessorInterface
         if (isset($this->readPropertyCache[$key])) {
             $access = $this->readPropertyCache[$key];
         } else {
+            $annotation = null;
+
             $access = array();
 
             $reflClass = new \ReflectionClass($class);
-            $access[self::ACCESS_HAS_PROPERTY] = $reflClass->hasProperty($property);
+            $hasProperty = $reflClass->hasProperty($property);
+            $access[self::ACCESS_HAS_PROPERTY] = $hasProperty;
+
+            if ($hasProperty && $this->reader) {
+                $annotation = $this->reader->getPropertyAnnotation($reflClass->getProperty($property),
+                    'Symfony\Component\PropertyAccess\Annotation\PropertyAccessor');
+
+            }
+
             $camelProp = $this->camelize($property);
             $getter = 'get'.$camelProp;
             $getsetter = lcfirst($camelProp); // jQuery style, e.g. read: last(), write: last($item)
             $isser = 'is'.$camelProp;
             $hasser = 'has'.$camelProp;
 
-            if ($reflClass->hasMethod($getter) && $reflClass->getMethod($getter)->isPublic()) {
+            if ($annotation && $annotation->getGetter()) {
+                $access[self::ACCESS_TYPE] = self::ACCESS_TYPE_METHOD;
+                $access[self::ACCESS_NAME] = $annotation->getGetter();
+            } elseif ($reflClass->hasMethod($getter) && $reflClass->getMethod($getter)->isPublic()) {
                 $access[self::ACCESS_TYPE] = self::ACCESS_TYPE_METHOD;
                 $access[self::ACCESS_NAME] = $getter;
             } elseif ($reflClass->hasMethod($getsetter) && $reflClass->getMethod($getsetter)->isPublic()) {
@@ -677,56 +698,83 @@ class PropertyAccessor implements PropertyAccessorInterface
         if (isset($this->writePropertyCache[$key])) {
             $access = $this->writePropertyCache[$key];
         } else {
+            $annotation = null;
+
             $access = array();
 
             $reflClass = new \ReflectionClass($class);
-            $access[self::ACCESS_HAS_PROPERTY] = $reflClass->hasProperty($property);
-            $camelized = $this->camelize($property);
-            $singulars = (array) Inflector::singularize($camelized);
+            $hasProperty = $reflClass->hasProperty($property);
+            $access[self::ACCESS_HAS_PROPERTY] = $hasProperty;
 
-            if (is_array($value) || $value instanceof \Traversable) {
-                $methods = $this->findAdderAndRemover($reflClass, $singulars);
+            $transversable = is_array($value) || $value instanceof \Traversable;
+            $done = false;
 
-                if (null !== $methods) {
-                    $access[self::ACCESS_TYPE] = self::ACCESS_TYPE_ADDER_AND_REMOVER;
-                    $access[self::ACCESS_ADDER] = $methods[0];
-                    $access[self::ACCESS_REMOVER] = $methods[1];
+            if ($hasProperty && $this->reader) {
+                $annotation = $this->reader->getPropertyAnnotation($reflClass->getProperty($property),
+                    'Symfony\Component\PropertyAccess\Annotation\PropertyAccessor');
+
+                if ($annotation) {
+                    if ($transversable && $annotation->getAdder() && $annotation->getRemover()) {
+                        $access[self::ACCESS_TYPE] = self::ACCESS_TYPE_ADDER_AND_REMOVER;
+                        $access[self::ACCESS_ADDER] = $annotation->getAdder();
+                        $access[self::ACCESS_REMOVER] = $annotation->getRemover();
+                        $done = true;
+                    } elseif ($annotation->getSetter()) {
+                        $access[self::ACCESS_TYPE] = self::ACCESS_TYPE_METHOD;
+                        $access[self::ACCESS_NAME] = $annotation->getSetter();
+                        $done = true;
+                    }
                 }
             }
 
-            if (!isset($access[self::ACCESS_TYPE])) {
-                $setter = 'set'.$camelized;
-                $getsetter = lcfirst($camelized); // jQuery style, e.g. read: last(), write: last($item)
+            if (!$done) {
+                $camelized = $this->camelize($property);
+                $singulars = (array) Inflector::singularize($camelized);
 
-                if ($this->isMethodAccessible($reflClass, $setter, 1)) {
-                    $access[self::ACCESS_TYPE] = self::ACCESS_TYPE_METHOD;
-                    $access[self::ACCESS_NAME] = $setter;
-                } elseif ($this->isMethodAccessible($reflClass, $getsetter, 1)) {
-                    $access[self::ACCESS_TYPE] = self::ACCESS_TYPE_METHOD;
-                    $access[self::ACCESS_NAME] = $getsetter;
-                } elseif ($this->isMethodAccessible($reflClass, '__set', 2)) {
-                    $access[self::ACCESS_TYPE] = self::ACCESS_TYPE_PROPERTY;
-                    $access[self::ACCESS_NAME] = $property;
-                } elseif ($access[self::ACCESS_HAS_PROPERTY] && $reflClass->getProperty($property)->isPublic()) {
-                    $access[self::ACCESS_TYPE] = self::ACCESS_TYPE_PROPERTY;
-                    $access[self::ACCESS_NAME] = $property;
-                } elseif ($this->magicCall && $this->isMethodAccessible($reflClass, '__call', 2)) {
-                    // we call the getter and hope the __call do the job
-                    $access[self::ACCESS_TYPE] = self::ACCESS_TYPE_MAGIC;
-                    $access[self::ACCESS_NAME] = $setter;
-                } else {
-                    $access[self::ACCESS_TYPE] = self::ACCESS_TYPE_NOT_FOUND;
-                    $access[self::ACCESS_NAME] = sprintf(
-                        'Neither the property "%s" nor one of the methods %s"%s()", "%s()", '.
-                        '"__set()" or "__call()" exist and have public access in class "%s".',
-                        $property,
-                        implode('', array_map(function ($singular) {
-                            return '"add'.$singular.'()"/"remove'.$singular.'()", ';
-                        }, $singulars)),
-                        $setter,
-                        $getsetter,
-                        $reflClass->name
-                    );
+                if ($transversable) {
+                    $methods = $this->findAdderAndRemover($reflClass, $singulars);
+
+                    if (null !== $methods) {
+                        $access[self::ACCESS_TYPE] = self::ACCESS_TYPE_ADDER_AND_REMOVER;
+                        $access[self::ACCESS_ADDER] = $methods[0];
+                        $access[self::ACCESS_REMOVER] = $methods[1];
+                    }
+                }
+
+                if (!isset($access[self::ACCESS_TYPE])) {
+                    $setter = 'set'.$camelized;
+                    $getsetter = lcfirst($camelized); // jQuery style, e.g. read: last(), write: last($item)
+
+                    if ($this->isMethodAccessible($reflClass, $setter, 1)) {
+                        $access[self::ACCESS_TYPE] = self::ACCESS_TYPE_METHOD;
+                        $access[self::ACCESS_NAME] = $setter;
+                    } elseif ($this->isMethodAccessible($reflClass, $getsetter, 1)) {
+                        $access[self::ACCESS_TYPE] = self::ACCESS_TYPE_METHOD;
+                        $access[self::ACCESS_NAME] = $getsetter;
+                    } elseif ($this->isMethodAccessible($reflClass, '__set', 2)) {
+                        $access[self::ACCESS_TYPE] = self::ACCESS_TYPE_PROPERTY;
+                        $access[self::ACCESS_NAME] = $property;
+                    } elseif ($access[self::ACCESS_HAS_PROPERTY] && $reflClass->getProperty($property)->isPublic()) {
+                        $access[self::ACCESS_TYPE] = self::ACCESS_TYPE_PROPERTY;
+                        $access[self::ACCESS_NAME] = $property;
+                    } elseif ($this->magicCall && $this->isMethodAccessible($reflClass, '__call', 2)) {
+                        // we call the getter and hope the __call do the job
+                        $access[self::ACCESS_TYPE] = self::ACCESS_TYPE_MAGIC;
+                        $access[self::ACCESS_NAME] = $setter;
+                    } else {
+                        $access[self::ACCESS_TYPE] = self::ACCESS_TYPE_NOT_FOUND;
+                        $access[self::ACCESS_NAME] = sprintf(
+                            'Neither the property "%s" nor one of the methods %s"%s()", "%s()", '.
+                            '"__set()" or "__call()" exist and have public access in class "%s".',
+                            $property,
+                            implode('', array_map(function ($singular) {
+                                return '"add'.$singular.'()"/"remove'.$singular.'()", ';
+                            }, $singulars)),
+                            $setter,
+                            $getsetter,
+                            $reflClass->name
+                        );
+                    }
                 }
             }
 
