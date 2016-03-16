@@ -18,7 +18,7 @@ use Symfony\Component\PropertyAccess\Exception\InvalidArgumentException;
 use Symfony\Component\PropertyAccess\Exception\NoSuchPropertyException;
 use Symfony\Component\PropertyAccess\Exception\NoSuchIndexException;
 use Symfony\Component\PropertyAccess\Exception\UnexpectedTypeException;
-use Symfony\Component\PropertyAccess\Mapping\Factory\ClassMetadataFactory;
+use Symfony\Component\PropertyAccess\Mapping\Factory\ClassMetadataFactoryInterface;
 
 /**
  * Default implementation of {@link PropertyAccessorInterface}.
@@ -119,12 +119,13 @@ class PropertyAccessor implements PropertyAccessorInterface
      * @var array
      */
     private $writePropertyCache = array();
+    
     private static $previousErrorHandler = false;
     private static $errorHandler = array(__CLASS__, 'handleError');
     private static $resultProto = array(self::VALUE => null);
 
     /**
-     * @var ClassMetadataFactory
+     * @var ClassMetadataFactoryInterface
      */
     private $classMetadataFactory;
 
@@ -135,7 +136,7 @@ class PropertyAccessor implements PropertyAccessorInterface
      * @param bool $magicCall
      * @param bool $throwExceptionOnInvalidIndex
      */
-    public function __construct($magicCall = false, $throwExceptionOnInvalidIndex = false, ClassMetadataFactory $classMetadataFactory = null)
+    public function __construct($magicCall = false, $throwExceptionOnInvalidIndex = false, ClassMetadataFactoryInterface $classMetadataFactory = null)
     {
         $this->magicCall = $magicCall;
         $this->ignoreInvalidIndices = !$throwExceptionOnInvalidIndex;
@@ -527,7 +528,7 @@ class PropertyAccessor implements PropertyAccessorInterface
             $access[self::ACCESS_HAS_PROPERTY] = $hasProperty;
 
             if ($hasProperty && $this->classMetadataFactory) {
-                $metadata = $this->classMetadataFactory->getMetadataFor($object)->getAttributesMetadata();
+                $metadata = $this->classMetadataFactory->getMetadataFor($class)->getPropertiesMetadata();
                 $metadata = isset($metadata[$property]) ? $metadata[$property] : null;
             }
 
@@ -710,7 +711,7 @@ class PropertyAccessor implements PropertyAccessorInterface
             $done = false;
 
             if ($hasProperty && $this->classMetadataFactory) {
-                $metadata = $this->classMetadataFactory->getMetadataFor($object)->getAttributesMetadata();
+                $metadata = $this->classMetadataFactory->getMetadataFor($class)->getPropertiesMetadata();
                 $metadata = isset($metadata[$property]) ? $metadata[$property] : null;
 
                 if ($metadata) {
