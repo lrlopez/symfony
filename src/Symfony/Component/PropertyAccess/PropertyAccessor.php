@@ -18,7 +18,7 @@ use Symfony\Component\PropertyAccess\Exception\InvalidArgumentException;
 use Symfony\Component\PropertyAccess\Exception\NoSuchPropertyException;
 use Symfony\Component\PropertyAccess\Exception\NoSuchIndexException;
 use Symfony\Component\PropertyAccess\Exception\UnexpectedTypeException;
-use Symfony\Component\PropertyAccess\Mapping\Factory\ClassMetadataFactoryInterface;
+use Symfony\Component\PropertyAccess\Mapping\Factory\MetadataFactoryInterface;
 
 /**
  * Default implementation of {@link PropertyAccessorInterface}.
@@ -136,7 +136,7 @@ class PropertyAccessor implements PropertyAccessorInterface
      * @param bool $magicCall
      * @param bool $throwExceptionOnInvalidIndex
      */
-    public function __construct($magicCall = false, $throwExceptionOnInvalidIndex = false, ClassMetadataFactoryInterface $classMetadataFactory = null)
+    public function __construct($magicCall = false, $throwExceptionOnInvalidIndex = false, MetadataFactoryInterface $classMetadataFactory = null)
     {
         $this->magicCall = $magicCall;
         $this->ignoreInvalidIndices = !$throwExceptionOnInvalidIndex;
