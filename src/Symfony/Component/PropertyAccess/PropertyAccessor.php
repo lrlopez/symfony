@@ -526,7 +526,7 @@ class PropertyAccessor implements PropertyAccessorInterface
             $hasProperty = $reflClass->hasProperty($property);
             $access[self::ACCESS_HAS_PROPERTY] = $hasProperty;
 
-            if ($hasProperty && $this->classMetadataFactory) {
+            if ($this->classMetadataFactory) {
                 $metadata = $this->classMetadataFactory->getMetadataFor($class)->getPropertiesMetadata();
                 $metadata = isset($metadata[$property]) ? $metadata[$property] : null;
             }
@@ -709,7 +709,7 @@ class PropertyAccessor implements PropertyAccessorInterface
             $transversable = is_array($value) || $value instanceof \Traversable;
             $done = false;
 
-            if ($hasProperty && $this->classMetadataFactory) {
+            if ($this->classMetadataFactory) {
                 $metadata = $this->classMetadataFactory->getMetadataFor($class)->getPropertiesMetadata();
                 $metadata = isset($metadata[$property]) ? $metadata[$property] : null;
 
