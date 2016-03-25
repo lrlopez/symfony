@@ -47,6 +47,14 @@ class PropertyAccessorBuilderTest extends \PHPUnit_Framework_TestCase
         $this->assertFalse($this->builder->disableMagicCall()->isMagicCallEnabled());
     }
 
+    public function testMetadataFactory()
+    {
+        $metadataFactory = $this->getMock('Symfony\Component\PropertyAccess\Mapping\Factory\MetadataFactoryInterface');
+        $this->assertNull($this->builder->getMetadataFactory());
+        $this->assertSame($metadataFactory, $this->builder->setMetadataFactory($metadataFactory)->getMetadataFactory());
+        $this->assertNull($this->builder->setMetadataFactory(null)->getMetadataFactory());
+    }
+
     public function testGetPropertyAccessor()
     {
         $this->assertInstanceOf('Symfony\Component\PropertyAccess\PropertyAccessor', $this->builder->getPropertyAccessor());
