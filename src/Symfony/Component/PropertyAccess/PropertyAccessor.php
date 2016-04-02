@@ -528,7 +528,7 @@ class PropertyAccessor implements PropertyAccessorInterface
             $access[self::ACCESS_HAS_PROPERTY] = $hasProperty;
 
             if ($this->classMetadataFactory) {
-                $metadata = $this->classMetadataFactory->getMetadataFor($class)->getPropertiesMetadata();
+                $metadata = $this->classMetadataFactory->getMetadataFor($class)->getPropertyMetadataCollection();
                 $metadata = isset($metadata[$property]) ? $metadata[$property] : null;
             }
 
@@ -711,7 +711,7 @@ class PropertyAccessor implements PropertyAccessorInterface
             $done = false;
 
             if ($this->classMetadataFactory) {
-                $metadata = $this->classMetadataFactory->getMetadataFor($class)->getPropertiesMetadata();
+                $metadata = $this->classMetadataFactory->getMetadataFor($class)->getPropertyMetadataCollection();
                 $metadata = isset($metadata[$property]) ? $metadata[$property] : null;
 
                 if ($metadata) {
