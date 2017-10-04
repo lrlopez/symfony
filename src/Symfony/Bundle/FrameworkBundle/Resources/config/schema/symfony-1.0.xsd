@@ -214,8 +214,12 @@
     </xsd:complexType>
 
     <xsd:complexType name="property_access">
+        <xsd:choice minOccurs="0" maxOccurs="unbounded">
+            <xsd:element name="mapping" type="file_mapping" />
+        </xsd:choice>
         <xsd:attribute name="magic-call" type="xsd:boolean" />
         <xsd:attribute name="throw-exception-on-invalid-index" type="xsd:boolean" />
+        <xsd:attribute name="enable-annotations" type="xsd:boolean" />
     </xsd:complexType>
 
     <xsd:complexType name="serializer">

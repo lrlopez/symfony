@@ -22,6 +22,7 @@ use Symfony\Component\PropertyAccess\Exception\AccessException;
 use Symfony\Component\PropertyAccess\Exception\InvalidArgumentException;
 use Symfony\Component\PropertyAccess\Exception\NoSuchPropertyException;
 use Symfony\Component\PropertyAccess\Exception\NoSuchIndexException;
+use Symfony\Component\PropertyAccess\Exception\RuntimeException;
 use Symfony\Component\PropertyAccess\Exception\UnexpectedTypeException;
 use Symfony\Component\PropertyAccess\Mapping\Factory\MetadataFactoryInterface;
 use Symfony\Component\PropertyAccess\Mapping\PropertyMetadata;
@@ -935,38 +936,6 @@ class PropertyAccessor implements PropertyAccessorInterface
     }
 
     /**
-     * Creates the APCu adapter if applicable.
-     *
-     * @param string               $namespace
-     * @param int                  $defaultLifetime
-     * @param string               $version
-     * @param LoggerInterface|null $logger
-     *
-     * @return AdapterInterface
-     *
-     * @throws RuntimeException When the Cache Component isn't available
-     */
-    public static function createCache($namespace, $defaultLifetime, $version, LoggerInterface $logger = null)
-    {
-        if (!class_exists('Symfony\Component\Cache\Adapter\ApcuAdapter')) {
-            throw new \RuntimeException(sprintf('The Symfony Cache component must be installed to use %s().', __METHOD__));
-        }
-
-        if (!ApcuAdapter::isSupported()) {
-            return new NullAdapter();
-        }
-
-        $apcu = new ApcuAdapter($namespace, $defaultLifetime / 5, $version);
-        if ('cli' === \PHP_SAPI && !ini_get('apc.enable_cli')) {
-            $apcu->setLogger(new NullLogger());
-        } elseif (null !== $logger) {
-            $apcu->setLogger($logger);
-        }
-
-        return $apcu;
-    }
-
-    /**
      * Returns metadata associated with the property if it exists.
      *
      * @param $class
@@ -1002,5 +971,37 @@ class PropertyAccessor implements PropertyAccessorInterface
     private function encodeCacheKey($key)
     {
         return str_replace('\\', '.', $key);
+    }
+
+    /**
+     * Creates the APCu adapter if applicable.
+     *
+     * @param string               $namespace
+     * @param int                  $defaultLifetime
+     * @param string               $version
+     * @param LoggerInterface|null $logger
+     *
+     * @return AdapterInterface
+     *
+     * @throws RuntimeException When the Cache Component isn't available
+     */
+    public static function createCache($namespace, $defaultLifetime, $version, LoggerInterface $logger = null)
+    {
+        if (!class_exists('Symfony\Component\Cache\Adapter\ApcuAdapter')) {
+            throw new \RuntimeException(sprintf('The Symfony Cache component must be installed to use %s().', __METHOD__));
+        }
+
+        if (!ApcuAdapter::isSupported()) {
+            return new NullAdapter();
+        }
+
+        $apcu = new ApcuAdapter($namespace, $defaultLifetime / 5, $version);
+        if ('cli' === \PHP_SAPI && !ini_get('apc.enable_cli')) {
+            $apcu->setLogger(new NullLogger());
+        } elseif (null !== $logger) {
+            $apcu->setLogger($logger);
+        }
+
+        return $apcu;
     }
 }

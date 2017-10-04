@@ -42,6 +42,20 @@ class PropertyAccessorBuilder
     private $metadataFactory;
 
     /**
+     * Sets the use of "__call" by the PropertyAccessor.
+     *
+     * @param bool $state
+     *
+     * @return $this
+     */
+    public function setMagicCall($state)
+    {
+        $this->magicCall = $state;
+
+        return $this;
+    }
+
+    /**
      * Enables the use of "__call" by the PropertyAccessor.
      *
      * @return $this
@@ -71,6 +85,23 @@ class PropertyAccessorBuilder
     public function isMagicCallEnabled()
     {
         return $this->magicCall;
+    }
+
+    /**
+     * Sets if exceptions when reading a non-existing index are enabled.
+     *
+     * This has no influence on writing non-existing indices with PropertyAccessorInterface::setValue()
+     * which are always created on-the-fly.
+     *
+     * @param bool $state
+     *
+     * @return $this
+     */
+    public function setExceptionOnInvalidIndex($state)
+    {
+        $this->throwExceptionOnInvalidIndex = $state;
+
+        return $this;
     }
 
     /**

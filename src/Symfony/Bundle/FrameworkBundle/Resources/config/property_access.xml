@@ -4,14 +4,40 @@
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:schemaLocation="http://symfony.com/schema/dic/services http://symfony.com/schema/dic/services/services-1.0.xsd">
 
+    <parameters>
+        <parameter key="validator.mapping.cache.prefix" />
+        <parameter key="validator.mapping.cache.file">%kernel.cache_dir%/validation.php</parameter>
+    </parameters>
+
     <services>
+
         <defaults public="false" />
 
-        <service id="property_accessor" class="Symfony\Component\PropertyAccess\PropertyAccessor">
-            <argument /> <!-- magicCall, set by the extension -->
-            <argument /> <!-- throwExceptionOnInvalidIndex, set by the extension -->
-            <argument type="service" id="cache.property_access" on-invalid="ignore" />
+        <!-- Builder -->
+        <service id="property_access.builder" class="Symfony\Component\PropertyAccess\PropertyAccessorBuilder">
+            <factory class="Symfony\Component\PropertyAccess\PropertyAccess" method="createPropertyAccessorBuilder" />
+            <call method="setExceptionOnInvalidIndex">
+                <argument>%property_access.throw_exception_on_invalid_index%</argument>
+            </call>
+            <call method="setMagicCall">
+                <argument>%property_access.magic_call%</argument>
+            </call>
         </service>
-        <service id="Symfony\Component\PropertyAccess\PropertyAccessorInterface" alias="property_accessor" />
+
+        <!-- Loader -->
+        <service id="property_access.mapping.chain_loader" class="Symfony\Component\PropertyAccess\Mapping\Loader\LoaderChain" public="false">
+            <argument type="collection" />
+        </service>
+
+        <!-- Class Metadata Factory -->
+        <service id="property_access.mapping.class_metadata_factory" class="Symfony\Component\PropertyAccess\Mapping\Factory\LazyLoadingMetadataFactory" public="false">
+            <argument type="service" id="property_access.mapping.chain_loader" />
+        </service>
+
+        <service id="property_accessor" class="Symfony\Component\PropertyAccess\PropertyAccessor">
+            <factory service="property_access.builder" method="getPropertyAccessor" />
+        </service>
+
+        <service id="Symfony\Component\PropertyAccess\PropertyAccessorInterface" alias="property_accessor" public="true" />
     </services>
 </container>
