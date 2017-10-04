@@ -81,6 +81,7 @@ abstract class FrameworkExtensionTest extends TestCase
         $this->assertTrue($def->getArgument(1));
     }
 
+
     public function testPropertyAccessCache()
     {
         $container = $this->createContainerFromFile('property_accessor');
