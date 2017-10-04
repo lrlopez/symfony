@@ -295,7 +295,7 @@ class FrameworkExtension extends Extension
         $this->registerDebugConfiguration($config['php_errors'], $container, $loader);
         $this->registerRouterConfiguration($config['router'], $container, $loader);
         $this->registerAnnotationsConfiguration($config['annotations'], $container, $loader);
-        $this->registerPropertyAccessConfiguration($config['property_access'], $container);
+        $this->registerPropertyAccessConfiguration($config['property_access'], $container, $loader);
 
         if ($this->isConfigEnabled($container, $config['serializer'])) {
             $this->registerSerializerConfiguration($config['serializer'], $container, $loader);
@@ -1310,6 +1310,35 @@ class FrameworkExtension extends Extension
     }
 
     /**
+     * @param ContainerBuilder $container
+     * @param array            $config
+     * @param $component
+     * @param $fileRecorder
+     */
+    private function registerComponentMapping(ContainerBuilder $container, array $config, $component, &$fileRecorder)
+    {
+        foreach ($container->getParameter('kernel.bundles_metadata') as $bundle) {
+            $dirname = $bundle['path'];
+
+            if (
+                $container->fileExists($file = $dirname.'/Resources/config/'.$component.'.yaml', false) ||
+                $container->fileExists($file = $dirname.'/Resources/config/'.$component.'.yml', false)
+            ) {
+                $fileRecorder('yml', $file);
+            }
+
+            if ($container->fileExists($file = $dirname.'/Resources/config/'.$component.'.xml', false)) {
+                $fileRecorder('xml', $file);
+            }
+
+            if ($container->fileExists($dir = $dirname.'/Resources/config/'.$component, '/^$/')) {
+                $this->registerMappingFilesFromDir($dir, $fileRecorder);
+            }
+        }
+        $this->registerMappingFilesFromConfig($container, $config, $fileRecorder);
+    }
+
+    /**
      * Loads the validator configuration.
      *
      * @param array            $config    A validation configuration array
@@ -1337,7 +1366,17 @@ class FrameworkExtension extends Extension
         $container->setParameter('validator.translation_domain', $config['translation_domain']);
 
         $files = array('xml' => array(), 'yml' => array());
-        $this->registerValidatorMapping($container, $config, $files);
+
+        $fileRecorder = function ($extension, $path) use (&$files) {
+            $files['yaml' === $extension ? 'yml' : $extension][] = $path;
+        };
+
+        if (interface_exists('Symfony\Component\Form\FormInterface')) {
+            $reflClass = new \ReflectionClass('Symfony\Component\Form\FormInterface');
+            $fileRecorder('xml', dirname($reflClass->getFileName()).'/Resources/config/validation.xml');
+        }
+
+        $this->registerComponentMapping($container, $config, 'validation', $fileRecorder);
 
         if (!empty($files['xml'])) {
             $validatorBuilder->addMethodCall('addXmlMappings', array($files['xml']));
@@ -1374,39 +1413,6 @@ class FrameworkExtension extends Extension
         } elseif (!$container->getParameter('kernel.debug')) {
             $validatorBuilder->addMethodCall('setMetadataCache', array(new Reference('validator.mapping.cache.symfony')));
         }
-    }
-
-    private function registerValidatorMapping(ContainerBuilder $container, array $config, array &$files)
-    {
-        $fileRecorder = function ($extension, $path) use (&$files) {
-            $files['yaml' === $extension ? 'yml' : $extension][] = $path;
-        };
-
-        if (interface_exists('Symfony\Component\Form\FormInterface')) {
-            $reflClass = new \ReflectionClass('Symfony\Component\Form\FormInterface');
-            $fileRecorder('xml', dirname($reflClass->getFileName()).'/Resources/config/validation.xml');
-        }
-
-        foreach ($container->getParameter('kernel.bundles_metadata') as $bundle) {
-            $dirname = $bundle['path'];
-
-            if (
-                $container->fileExists($file = $dirname.'/Resources/config/validation.yaml', false) ||
-                $container->fileExists($file = $dirname.'/Resources/config/validation.yml', false)
-            ) {
-                $fileRecorder('yml', $file);
-            }
-
-            if ($container->fileExists($file = $dirname.'/Resources/config/validation.xml', false)) {
-                $fileRecorder('xml', $file);
-            }
-
-            if ($container->fileExists($dir = $dirname.'/Resources/config/validation', '/^$/')) {
-                $this->registerMappingFilesFromDir($dir, $fileRecorder);
-            }
-        }
-
-        $this->registerMappingFilesFromConfig($container, $config, $fileRecorder);
     }
 
     private function registerMappingFilesFromDir($dir, callable $fileRecorder)
@@ -1494,12 +1500,45 @@ class FrameworkExtension extends Extension
         }
     }
 
-    private function registerPropertyAccessConfiguration(array $config, ContainerBuilder $container)
+    private function registerPropertyAccessConfiguration(array $config, ContainerBuilder $container, XmlFileLoader $loader)
     {
+        $loader->load('property_access.xml');
+
+        $chainLoader = $container->getDefinition('property_access.mapping.chain_loader');
+
+        $serializerLoaders = array();
+        if (isset($config['enable_annotations']) && $config['enable_annotations']) {
+            if (!$this->annotationsConfigEnabled) {
+                throw new \LogicException('"enable_annotations" on property access cannot be set as Annotations support is disabled.');
+            }
+
+            $annotationLoader = new Definition(
+                'Symfony\Component\PropertyAccess\Mapping\Loader\AnnotationLoader',
+                array(new Reference('annotation_reader'))
+            );
+            $annotationLoader->setPublic(false);
+
+            $serializerLoaders[] = $annotationLoader;
+        }
+
+        $fileRecorder = function ($extension, $path) use (&$serializerLoaders) {
+            $definition = new Definition(in_array($extension, array('yaml', 'yml')) ? 'Symfony\Component\PropertyAccess\Mapping\Loader\YamlFileLoader' : 'Symfony\Component\PropertyAccess\Mapping\Loader\XmlFileLoader', array($path));
+            $definition->setPublic(false);
+            $serializerLoaders[] = $definition;
+        };
+
+        $this->registerComponentMapping($container, $config, 'property_accessor', $fileRecorder);
+
+        $chainLoader->replaceArgument(0, $serializerLoaders);
+
+        $metadataLoader = $container->getDefinition('property_access.mapping.class_metadata_factory')
+            ->replaceArgument(0, $chainLoader);
+
         $container
             ->getDefinition('property_accessor')
             ->replaceArgument(0, $config['magic_call'])
             ->replaceArgument(1, $config['throw_exception_on_invalid_index'])
+            ->replaceArgument(3, $metadataLoader)
         ;
     }
 

@@ -85,12 +85,7 @@ abstract class FrameworkExtensionTest extends TestCase
     {
         $container = $this->createContainerFromFile('property_accessor');
 
-        if (!method_exists(PropertyAccessor::class, 'createCache')) {
-            return $this->assertFalse($container->hasDefinition('cache.property_access'));
-        }
-
         $cache = $container->getDefinition('cache.property_access');
-        $this->assertSame(array(PropertyAccessor::class, 'createCache'), $cache->getFactory(), 'PropertyAccessor::createCache() should be used in non-debug mode');
         $this->assertSame(AdapterInterface::class, $cache->getClass());
     }
 
@@ -98,12 +93,7 @@ abstract class FrameworkExtensionTest extends TestCase
     {
         $container = $this->createContainerFromFile('property_accessor', array('kernel.debug' => true));
 
-        if (!method_exists(PropertyAccessor::class, 'createCache')) {
-            return $this->assertFalse($container->hasDefinition('cache.property_access'));
-        }
-
         $cache = $container->getDefinition('cache.property_access');
-        $this->assertNull($cache->getFactory());
         $this->assertSame(ArrayAdapter::class, $cache->getClass(), 'ArrayAdapter should be used in debug mode');
     }
 
