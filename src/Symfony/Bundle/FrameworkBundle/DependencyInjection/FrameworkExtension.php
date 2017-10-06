@@ -1501,6 +1501,33 @@ class FrameworkExtension extends Extension
 
     private function registerPropertyAccessConfiguration(array $config, ContainerBuilder $container)
     {
+        $loaders = array();
+        $fileRecorder = function ($extension, $path) use (&$loaders) {
+            //$definition = new Definition(in_array($extension, array('yaml', 'yml')) ? 'Symfony\Component\PropertyAccess\Mapping\Loader\YamlFileLoader' : 'Symfony\Component\PropertyAccess\Mapping\Loader\XmlFileLoader', array($path));
+            //$definition->setPublic(false);
+            //$loaders[] = $definition;
+        };
+
+        if (isset($config['enable_annotations']) && $config['enable_annotations']) {
+            if (!$this->annotationsConfigEnabled) {
+                throw new \LogicException('"enable_annotations" on property access cannot be set as Annotations support is disabled.');
+            }
+            $annotationLoader = new Definition(
+                'Symfony\Component\PropertyAccess\Mapping\Loader\AnnotationLoader',
+                array(new Reference('annotation_reader'))
+            );
+            $annotationLoader->setPublic(false);
+            $loaders[] = $annotationLoader;
+        }
+
+        $this->registerComponentMapping($container, $fileRecorder, 'property_accessor');
+
+        $this->registerMappingFilesFromConfig($container, $config, $fileRecorder);
+
+        $chainLoader = $container->getDefinition('property_access.mapping.chain_loader');
+
+        $chainLoader->replaceArgument(0, $loaders);
+
         $container
             ->getDefinition('property_accessor')
             ->replaceArgument(0, $config['magic_call'])
